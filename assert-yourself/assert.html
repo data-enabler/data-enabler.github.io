@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Assert Yourself</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+    <style type="text/css">
+      @import url(https://fonts.googleapis.com/css?family=Lato);
+
+      body {
+        font-family: Helvetica, Arial, system-ui, sans-serif;
+      }
+      h1, h2, h3 {
+        font-family: Lato, Helvetica, Arial, system-ui, sans-serif;
+        font-weight: normal;
+      }
+      .remark-notes-area {
+        font-size: 150%;
+      }
+      .remark-slide-content {
+        font-size: 30px;
+        padding: 0.5em 2em 0.5em 2em;
+      }
+      .remark-code, .remark-inline-code {
+        font-family: Monaco, Courier, monospace;
+      }
+      .remark-code {
+        font-size: 39px;
+        white-space: pre-wrap;
+      }
+      .small .remark-code {
+        font-size: 30px;
+      }
+      .smaller .remark-code {
+        font-size: 24px;
+      }
+      .remark-slide-content table {
+        font-size: 44px;
+        border-collapse: collapse;
+        width: 100%;
+      }
+      .remark-slide-content table, .remark-slide-content th, .remark-slide-content td {
+        border: 2px solid gray;
+      }
+      .remark-slide-content th, .remark-slide-content td {
+        padding: 10px;
+      }
+      .remark-slide-content tbody tr:nth-child(odd) {
+        background-color: #f2f2f2
+      }
+    </style>
+  </head>
+  <body onload="var slideshow = remark.create();">
+    <textarea id="source">
+
+background-image: url(teamcity1.png)
+background-size: contain
+???
+I'm sure many of you have been in this situation before: you see the tests fail for one of your team's services, so you open up TeamCity and you see this:
+
+---
+background-image: url(teamcity2.png)
+background-size: contain
+???
+Okay, let's see what we have here...
+
+AssertionFailedError. Aaaaand that's it. Great. That tells me nothing, and now I need fire up IntelliJ to figure out what's going on.
+
+---
+class: center, middle
+# Assert Yourself
+## (properly)
+???
+So today, we're going to be talking about making our test output useful.
+
+---
+class: left, middle
+# Don't do this:
+```java
+assertTrue(myList.isEmpty());
+```
+```console
+java.lang.AssertionError
+```
+???
+So first up is the tried-and-true classic, assertTrue.
+
+The code we have here works fine for testing that a list is empty, but note the completely useless test failure output.
+
+---
+class: left, middle
+# Documentation is good
+```java
+assertTrue(
+    "List not empty",
+    myList.isEmpty());
+```
+.small[```console
+java.lang.AssertionError: List not empty
+```]
+???
+It is possible to add an error message to assertTrue, but...
+
+---
+class: left, middle
+# ...when we make use of it
+```java
+assertTrue(boolean)
+Found usages: 3351
+```
+```java
+assertTrue(String, boolean)
+Found usages: 337
+```
+???
+...clearly nobody has time for that.
+
+Currently, less than 10% of our assertTrue calls have error messages.
+
+---
+class: left, middle
+# `assertEquals`
+```java
+assertEquals(0, myList.size());
+```
+```console
+java.lang.AssertionError:
+Expected :0
+Actual   :3
+```
+???
+There's also assertEquals.
+
+In this case we're asserting that the list size is equal to zero, which gives more helpful output...
+
+---
+class: left, middle
+```java
+assertEquals(myList.size(), 0);
+```
+```console
+java.lang.AssertionError:
+Expected :3
+Actual   :0
+```
+???
+...if you don't screw up the argument order
+
+---
+class: center, middle
+
+| second argument value | count |
+| :--- | ---: |
+| boolean literal | 24 |
+| number literal | 188 |
+| string literal | 178 |
+| constant | 178 |
+| a variable named "expected*" | 38 |
+
+### (Total `assertEquals` calls under `/test`: 10250)
+???
+...which we do at least 6% of the time.
+
+Grepping around, I was able to find over 600 lines in our test directory where assertEquals is being used incorrectly, with the arguments in the wrong order.
+
+---
+class: center, middle
+# Is there a better way?
+???
+Now what would be nice is if there were a way to get useful test failure output, without having to write out long error messages.
+
+---
+class: center, middle
+# There is!
+.smaller[```java
+assertThat(T actual, Matcher<? super T> matcher)
+```]
+???
+Well this exists, as of JUnit 4.4,
+
+which to be clear is about a decade old,
+
+and it's called assertThat
+
+---
+class: left, middle
+# Checking if a list is empty
+.small[```java
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.is;
+```]
+```java
+assertThat(myList, is(empty()));
+```
+```console
+java.lang.AssertionError:
+Expected: is an empty collection
+     but: <[1, 2, 3]>
+```
+???
+Here's an example of its use.
+
+Up top, we have a couple of static imports, just to reduce clutter while we're writing our assertions. Below, we have an example assertion and it's failure output.
+
+There's two things to take note of.
+
+---
+class: left, middle
+```java
+assertThat(myList, is(empty()));
+```
+???
+First is the syntax.
+
+It reads easily, right? It's pretty much an English sentence.
+
+---
+class: left, middle
+```console
+java.lang.AssertionError:
+Expected: is an empty collection
+     but: <[1, 2, 3]>
+```
+???
+Second is the output.
+
+Note that because we're being more declarative about what we're testing, assertThat can give us better output when the test fails.
+
+In this case, if the list is not empty its contents get printed out. Pretty useful.
+
+---
+class: left, middle
+.small[```java
+assertThat(
+    responseString,
+    anyOf(
+        containsString("timeout"),
+        containsString("time-out")));
+```]
+.smaller[```console
+java.lang.AssertionError: 
+Expected: (a string containing "timeout" or a string containing "time-out")
+     got: "timout: 10s"
+```]
+???
+assertThat can also make more complicated checks much easier to read.
+
+Here we have a assertion that checks that the string contains one of two substrings.
+
+---
+class: left, middle
+# And even more stuff!
+.small[```java
+any(java.lang.Class<T> type)
+
+containsInAnyOrder(T... items)
+
+greaterThanOrEqualTo(T value)
+
+hasSize(int size)
+
+isEmptyOrNullString()
+```]
+
+[org.hamcrest.Matchers](http://hamcrest.org/JavaHamcrest/javadoc/1.3/org/hamcrest/Matchers.html)
+???
+There are a ton of other matchers available too. I highly recommend giving the Matcher javadoc a read through; the ones one this slide are just a small sampling.
+
+---
+class: left, middle
+# Also: AssertJ
+.small[```java
+assertThat(fellowshipOfTheRing)
+    .extracting(TolkienCharacter::getName)
+    .doesNotContain("Sauron", "Elrond");
+```]
+???
+There's also AssertJ, which has very similar ideas, but with an API based on chaining methods. This one isn't available in our codebase yet.
+
+---
+class: center, middle
+# The moral of our story
+???
+But at the end of the day, it doesn't really matter that much what tools you use. What matters is that your tests are easy to read, and give helpful messages when they break.
+
+---
+class: left, middle
+```java
+assertTrue(
+    response != null &&
+    response.contains("ok"));
+```
+???
+So the next time someone sends you one of these...
+
+---
+background-image: url(lbtm.png)
+background-size: contain
+???
+...you send them one of these.
+
+Thank you.
+
+    </textarea>
+    <script type="text/javascript" src="remark.min.js">
+    </script>
+  </body>
+</html>
